@@ -1,0 +1,518 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2014, Mark Williams <maw325@gmail.com>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice,
+#   this list of conditions and the following disclaimer.
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+# * The name of the author may not be used to endorse or promote products
+#   derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+__version__ = "0.1.0"
+
+from RPLCD import CharLCD
+from RPLCD import Alignment, CursorMode, ShiftMode
+from RPLCD import cursor, cleared
+import RPIO
+import os
+import time
+import smtplib
+
+#==========================#
+#====    CONSTANTS     ====#
+#==========================#
+# Constants for text message class.
+GMAIL_SMTP = 'smtp.gmail.com'
+GMAIL_PORT = 587
+MAX_TEXT_LEN = 160
+
+# Constants for LED class.
+LED_STATUS_ON = True
+LED_STATUS_OFF = False
+
+# Constant(s) for sending text message
+# Used to clean up phone numbers. Only allow digits. May replace with isdigit().
+LSTCHAR = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+
+#==========================#
+#==== HELPER FUNCTIONS ====#
+#==========================#
+
+
+def msleep(seconds):
+    # Sleep the specified amount of milliseconds. Input in seconds.
+    time.sleep(seconds / 1000.0)
+
+
+class RPiLCD(object):
+    #=================================================================================================================#
+    #==== Overview:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== This class will be used to control the LCD screen with the help of RPLCD.                               ====#
+    #=================================================================================================================#
+    #==== Created:                                                                                                ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #==== 01/06/2014      Mark Williams  No                Creation of Class.                                     ====#
+    #=================================================================================================================#
+    #==== Revision:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #====                                                                                                         ====#
+    #=================================================================================================================#
+    #==== Arguments:                                                                                              ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== rs_pin - RS pin on the LCD board. This can be the Board numbering system or the BCM numbering system.   ====#
+    #==== rw_pin - RW pin on the LCD board. This can be the Board numbering system or the BCM numbering system.   ====#
+    #==== e_pin  - E pin on the LCD board. This can be the Board numbering system or the BCM numbering system.    ====#
+    #==== data_pins - The four pins for the screen. This is input as a list. Can use Board or BCM system.         ====#
+    #==== board_mode - Determine which board numbering system to use.                                             ====#
+    #==== nbr_col - Number of columns the screen has. Default is 20.                                              ====#
+    #==== nbr_rows - Number of rows the screen has. Default is 4.                                                 ====#
+    #==== dot_sz - Dot size to use for the screen. Change font size.                                              ====#
+    #=================================================================================================================#
+    #==== Use (arbitrary pin numbers used):                                                                       ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from RPiConsole import RPiLCD                                                                           ====#
+    #====                                                                                                         ====#
+    #==== pin_rs    = 18                                                                                          ====#
+    #==== pin_rw    = 22                                                                                          ====#
+    #==== pin_e     = 24                                                                                          ====#
+    #==== pins_data = [26,25,27,8]                                                                                ====#
+    #==== nbr_mode  = RPIO.BOARD                                                                                  ====#
+    #==== nbr_cols  = 20                                                                                          ====#
+    #==== nbr_row   = 4                                                                                           ====#
+    #==== dotsize   = 8                                                                                           ====#
+    #====                                                                                                         ====#
+    #==== myLCD = RPiLCD(pin_rs, pin_rw, pin_e, pins_data, nbr_mode, nbr_cols, nbr_row, dotsize)                  ====#
+    #====                                                                                                         ====#
+    #==== # Write to the first line.                                                                              ====#
+    #==== myLCD.write_to_lcd_display(0, 'Hello')                                                                  ====#
+    #==== # Write to the second line.                                                                             ====#
+    #==== myLCD.write_to_lcd_display(1, 'World')                                                                  ====#
+    #====                                                                                                         ====#
+    #==== # Clear screen.                                                                                         ====#
+    #==== myLCD.clear_lcd_display()                                                                               ====#
+    #==== # Clear and close screen.                                                                               ====#
+    #==== myLCD.close_clear_lcd_display()                                                                         ====#
+    #=================================================================================================================#
+
+    def __init__(self, rs_pin, rw_pin, e_pin, data_pins, board_mode, nbr_col=20, nbr_rows=4, dot_sz=8):
+        self.lcd = CharLCD(pin_rs=rs_pin, pin_rw=rw_pin, pin_e=e_pin, pins_data=data_pins,
+                           numbering_mode=board_mode,
+                           cols=nbr_col, rows=nbr_rows, dotsize=dot_sz)
+
+    def clear_lcd_display(self):
+        self.lcd.clear()
+
+    def close_clear_lcd_display(self):
+        self.lcd.close(clear=True)
+
+    def write_to_lcd_display(self, row_to_write=0, row_string='Default'):
+        # Set the location of the cursor.
+        self.lcd.cursor_pos = (row_to_write, 0)
+        # Write the input to the screen.
+        self.lcd.write_string(row_string)
+
+
+class RPiThermometer(object):
+    #=================================================================================================================#
+    #==== Overview:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== This class will be used to read temperatures from a DS18B20 "1-wire" temperature sensor.                ====#
+    #=================================================================================================================#
+    #==== Created:                                                                                                ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #==== 01/06/2014      Mark Williams  No                Creation of Class.                                     ====#
+    #=================================================================================================================#
+    #==== Revision:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #====                                                                                                         ====#
+    #=================================================================================================================#
+    #==== Arguments:                                                                                              ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== device_dir   - Directory of where the temperature sensor is located.                                    ====#
+    #==== temp_measure - Default is 'F'. Put 'C' for Celsius.                                                     ====#
+    #=================================================================================================================#
+    #==== Use:                                                                                                    ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from RPiConsole import RPiThermometer                                                                   ====#
+    #==== import time                                                                                             ====#
+    #====                                                                                                         ====#
+    #==== # Replace "28-000005016325" with your sensors id.                                                       ====#
+    #==== therm_dir = '/sys/bus/w1/devices/28-000005016325/w1_slave'                                              ====#
+    #====                                                                                                         ====#
+    #==== temp_val = RPiThermometer(therm_dir)                                                                    ====#
+    #====                                                                                                         ====#
+    #==== While True:                                                                                             ====#
+    #====     print temp_val.read_temp()                                                                          ====#
+    #====     time.sleep(2)                                                                                       ====#
+    #=================================================================================================================#
+
+    def __init__(self, device_dir, temp_measure='F'):
+        self.device_dir = device_dir
+        self.temp_measure = temp_measure
+        os.system('modprobe w1-gpio')
+        os.system('modprobe w1-therm')
+
+    def _read_raw_temp(self):
+        f = open(self.device_dir, 'r')
+        lines = f.readlines()
+        f.close()
+        return lines
+
+    def read_temp(self):
+        lines = self._read_raw_temp()
+        #Make sure the last part of the first line is equal to 'YES'
+        #'YES' indicates the sensor is ready for use.
+        while lines[0].strip()[-3:] != 'YES':
+            time.sleep(0.2)
+            lines = self._read_raw_temp()
+        equals_pos = lines[1].find('t=')
+        #If equals_pos = -1 than it did not find 't=' in the second line from the slave.
+        if equals_pos != -1:
+            temp_string = lines[1][equals_pos + 2:]
+            temp_c = float(temp_string) / 1000.0
+            temp_f = temp_c * 9.0 / 5.0 + 32.0
+            if self.temp_measure.upper == 'F':
+                return temp_f
+            elif self.temp_measure.upper == 'C':
+                return temp_c
+
+
+class RPiLedControl(object):
+    #=================================================================================================================#
+    #==== Overview:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== This class will be used to control LED lights.                                                          ====#
+    #=================================================================================================================#
+    #==== Created:                                                                                                ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #==== 01/06/2014      Mark Williams  No                Creation of Class.                                     ====#
+    #=================================================================================================================#
+    #==== Revision:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #====                                                                                                         ====#
+    #=================================================================================================================#
+    #==== Arguments:                                                                                              ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== led_pin     - This is the pin the LED is wired to.                                                      ====#
+    #==== number_mode - Default is RPIO.BOARD. This is the numbering to use for pin setup.                        ====#
+    #=================================================================================================================#
+    #==== Use:                                                                                                    ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from RPiConsole import RPiLedControl                                                                    ====#
+    #==== import time                                                                                             ====#
+    #====                                                                                                         ====#
+    #==== # Set LED                                                                                               ====#
+    #==== GREEN_LED_PIN = 18                                                                                      ====#
+    #====                                                                                                         ====#
+    #==== Green_LED = RPiLedControl(GREEN_LED_PIN)                                                                ====#
+    #====                                                                                                         ====#
+    #==== While True:                                                                                             ====#
+    #====     Green_LED.led_on()                                                                                  ====#
+    #====     time.sleep(2)                                                                                       ====#
+    #====     Green_LED.led_off()                                                                                 ====#
+    #====     time.sleep(1)                                                                                       ====#
+    #=================================================================================================================#
+    def __init__(self, led_pin, number_mode=RPIO.BOARD):
+        self.number_mode = number_mode
+        self.led_pin = led_pin
+        # Set the board pin layout we want to use.
+        RPIO.setmode(self.number_mode)
+        # Setup the LED Pin.
+        RPIO.setup(self.led_pin, RPIO.OUT)
+
+    def led_on(self):
+        RPIO.output(self.led_pin, LED_STATUS_ON)
+
+    def led_off(self):
+        RPIO.output(self.led_pin, LED_STATUS_OFF)
+
+
+class RPiStepperMotor(object):
+    # TODO: Add comments and overview for RPiStepperMotor.
+    def __init__(self, pins_coil_data, number_mode=RPIO.BOARD, driver_typ='ULN2003/ULN2803', e_pin=None):
+        self.pin_a1 = pins_coil_data[0]
+        self.pin_a2 = pins_coil_data[1]
+        self.pin_b1 = pins_coil_data[2]
+        self.pin_b2 = pins_coil_data[3]
+        self.number_mode = number_mode
+        self.driver_typ = driver_typ
+        self.e_pin = e_pin
+
+        RPIO.setmode(self.number_mode)
+
+        if self.driver_typ != 'ULN2003/ULN2803' and self.e_pin is not None:
+            RPIO.setup(e_pin, RPIO.OUT)
+            RPIO.output(e_pin, 1)
+        for p in pins_coil_data:
+            RPIO.setup(p, RPIO.OUT)
+            RPIO.output(p, 0)
+
+    def _setstep(self, w1, w2, w3, w4):
+        RPIO.output(self.pin_a1, w1)
+        RPIO.output(self.pin_a2, w2)
+        RPIO.output(self.pin_b1, w3)
+        RPIO.output(self.pin_b2, w4)
+
+    def move_steps(self, delay, steps):
+        if steps > 0:
+            for i in range(0, steps):
+                self._setstep(1, 0, 1, 0)
+                msleep(delay)
+                self._setstep(0, 1, 1, 0)
+                msleep(delay)
+                self._setstep(0, 1, 0, 1)
+                msleep(delay)
+                self._setstep(1, 0, 0, 1)
+                msleep(delay)
+        else:
+            revsteps = steps * -1
+            for i in range(0, revsteps):
+                self._setstep(1, 0, 0, 1)
+                msleep(delay)
+                self._setstep(0, 1, 0, 1)
+                msleep(delay)
+                self._setstep(0, 1, 1, 0)
+                msleep(delay)
+                self._setstep(1, 0, 1, 0)
+                msleep(delay)
+
+    def release_motor(self):
+        self._setstep(0, 0, 0, 0)
+
+
+class RPiElapsedTime(object):
+    # TODO: Update "Use" section on this class.
+    #=================================================================================================================#
+    #==== Overview:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== This class will be used to determine how long the door has been open.                                   ====#
+    #=================================================================================================================#
+    #==== Created:                                                                                                ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #==== 01/06/2014      Mark Williams  No                Creation of Class.                                     ====#
+    #=================================================================================================================#
+    #==== Revision:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #====                                                                                                         ====#
+    #=================================================================================================================#
+    #==== Arguments:                                                                                              ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== starttime - This is the time that the door opened.                                                      ====#
+    #==== maxtime   - This is the max time allowed for the door to be open in seconds.                            ====#
+    #=================================================================================================================#
+    #==== Use:                                                                                                    ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from RPiConsole import RPiElapsedTime                                                                   ====#
+    #==== import time                                                                                             ====#
+    #====                                                                                                         ====#
+    #==== # Set starttime assuming door has been triggered open.                                                  ====#
+    #==== starttm = time.time()                                                                                   ====#
+    #====                                                                                                         ====#
+    #==== # Set the max seconds allowed.                                                                          ====#
+    #==== maxsec = 60                                                                                             ====#
+    #====                                                                                                         ====#
+    #==== elapse = RPiElapsedTime(starttm, maxsec)                                                                ====#
+    #====                                                                                                         ====#
+    #==== elapsetm = elapse.checktime()                                                                           ====#
+    #====                                                                                                         ====#
+    #==== While not elapsetm:                                                                                     ====#
+    #====     elapsetm = elapse.checktime()                                                                       ====#
+    #====     time.sleep(1)                                                                                       ====#
+    #=================================================================================================================#
+    def __init__(self, starttime, maxtime):
+        self.starttime = starttime
+        self.maxtime = int(maxtime)
+
+    def checktime(self):
+        nowtime = time.time()
+        check = int(nowtime - self.starttime)
+        if check == self.maxtime:
+            return True
+        else:
+            return False
+
+
+class RPiReedSwitch(object):
+    #=================================================================================================================#
+    #==== Overview:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== This class will be used to determine when the reed switch is opened.                                    ====#
+    #=================================================================================================================#
+    #==== Created:                                                                                                ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #==== 01/06/2014      Mark Williams  No                Creation of Class.                                     ====#
+    #=================================================================================================================#
+    #==== Revision:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #====                                                                                                         ====#
+    #=================================================================================================================#
+    #==== Arguments:                                                                                              ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== pin_door - This is the pin the door is wired to.                                                        ====#
+    #==== number_mode - Default is RPIO.BOARD. This is the numbering to use for pin setup.                        ====#
+    #=================================================================================================================#
+    #==== Use:                                                                                                    ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from RPiConsole import RPiReedSwitch                                                                    ====#
+    #==== import time                                                                                             ====#
+    #====                                                                                                         ====#
+    #==== # Set reed switch pin.                                                                                  ====#
+    #==== door_pin = 18                                                                                           ====#
+    #====                                                                                                         ====#
+    #==== door = RPiReedSwitch(door_pin)                                                                          ====#
+    #==== doorstatus = door.switchstatus()                                                                        ====#
+    #====                                                                                                         ====#
+    #==== While not doorstatus:                                                                                   ====#
+    #====     doorstatus = door.switchstatus()                                                                    ====#
+    #====     time.sleep(1)                                                                                       ====#
+    #====                                                                                                         ====#
+    #==== if doorstatus:                                                                                          ====#
+    #====     print "Door open!"                                                                                  ====#
+    #=================================================================================================================#
+    def __init__(self, pin_door, number_mode=RPIO.BOARD):
+        self.pin_door = pin_door
+        self.number_mode = number_mode
+        RPIO.setmode(self.number_mode)
+
+    def switchstatus(self):
+        RPIO.setup(self.pin_door, RPIO.IN, pull_up_down=RPIO.PUD_UP)
+        bswitch = RPIO.input(self.pin_door)
+        return bswitch
+
+
+class RPiEmailText(object):
+    #=================================================================================================================#
+    #==== Overview:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== This class will be used to send a text message. This only sends a text from a GMAIL account.            ====#
+    #=================================================================================================================#
+    #==== Created:                                                                                                ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #==== 01/06/2014      Mark Williams  No                Creation of Class.                                     ====#
+    #=================================================================================================================#
+    #==== Revision:                                                                                               ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== DATE            AUTHOR         VERSION CHANGE    DESCRIPTION                                            ====#
+    #==== --------------  -------------  ----------------  ------------------------------------------------------ ====#
+    #====                                                                                                         ====#
+    #=================================================================================================================#
+    #==== Arguments:                                                                                              ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from_email       - This is the email address to send the email from.                                    ====#
+    #==== psw_email        - Email addresses password.                                                            ====#
+    #==== service_provider - This is the receiver's cell phone provider.                                          ====#
+    #==== to_phone_nbr     - This is the person's phone number. Standard in format = 0000000000                   ====#
+    #==== msg              - This is the message you want to send. It will split messages into 160 characters per ====#
+    #====                    message.                                                                             ====#
+    #=================================================================================================================#
+    #==== Use:                                                                                                    ====#
+    #==== ------------------------------------------------------------------------------------------------------- ====#
+    #==== from RPiConsole import RPiEmailText                                                                     ====#
+    #==== import time                                                                                             ====#
+    #====                                                                                                         ====#
+    #==== # Set variables.                                                                                        ====#
+    #==== email     = me@gmail.com                                                                                ====#
+    #==== psw       = 'me'                                                                                        ====#
+    #==== provider  = 'verizon'                                                                                   ====#
+    #==== phone_nbr = '2222222222'                                                                                ====#
+    #==== message   = 'This is a test.'                                                                           ====#
+    #====                                                                                                         ====#
+    #==== txt = RPiEmailText(email, psw, provider, phone_nbr, message)                                            ====#
+    #====                                                                                                         ====#
+    #==== While True:                                                                                             ====#
+    #====     txt.send_text()                                                                                     ====#
+    #====     time.sleep(1)                                                                                       ====#
+    #=================================================================================================================#
+    def __init__(self, from_email, psw_email, service_provider, to_phone_nbr, msg):
+        self.from_email = from_email
+        self.psw_email = psw_email
+        self.service_provider = service_provider.upper()
+        self.to_phone_nbr = to_phone_nbr
+        self.msg = msg
+
+    #Reference: http://20somethingfinance.com/how-to-send-text-messages-sms-via-email-for-free/
+    def _provider_format(self):
+        if self.service_provider == 'VERIZON':
+            return '@vtext.com'
+        elif self.service_provider == 'ATT':
+            return '@txt.att.net'
+        elif self.service_provider == 'TMOBILE':
+            return '@tmomail.net'
+        elif self.service_provider == 'QWEST':
+            return '@qwestmp.com'
+        elif self.service_provider == 'SPRINT':
+            return '@messaging.sprintpcs.com'
+        elif self.service_provider == 'VIRGIN MOBILE' or self.service_provider == 'VIRGIN':
+            return '@vmobl.com'
+        elif self.service_provider == 'NEXTEL':
+            return '@messaging.nextel.com'
+        elif self.service_provider == 'ALLTEL':
+            return '@message.alltel.com'
+        elif self.service_provider == 'METRO PCS' or self.service_provider == 'METRO':
+            return '@mymetropcs.com'
+        elif self.service_provider == 'POWERTEL':
+            return '@ptel.com'
+        elif self.service_provider == 'BOOST MOBILE' or self.service_provider == 'BOOST':
+            return '@myboostmobile.com'
+        elif self.service_provider == 'SUNCOM':
+            return '@tms.suncom.com'
+        elif self.service_provider == 'TRACFONE' or self.service_provider == 'TRACPHONE':
+            return '@mmst5.tracfone.com'
+        elif self.service_provider == 'US CELLULAR' or self.service_provider == 'U.S. CELLULAR':
+            return '@email.uscc.net'
+
+    def _phone_nbr_format(self):
+        phone_nbr = ''.join(c for c in self.to_phone_nbr if c in LSTCHAR)
+        return phone_nbr
+
+    def send_text(self):
+        phone_nbr = self._phone_nbr_format() + self._provider_format()
+        server = smtplib.SMTP(GMAIL_SMTP, GMAIL_PORT)
+        server.starttls()
+        server.login(self.from_email, self.psw_email)
+
+        for i in range(0, len(self.msg), MAX_TEXT_LEN):
+            server.sendmail('<from>', phone_nbr, self.msg[i:i + MAX_TEXT_LEN])
+
+        server.quit()
